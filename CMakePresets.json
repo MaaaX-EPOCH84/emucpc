@@ -1,0 +1,72 @@
+{
+  "version": 6,
+  "cmakeMinimumRequired": { "major": 3, "minor": 28, "patch": 0 },
+  "configurePresets": [
+    {
+      "name": "base",
+      "hidden": true,
+      "generator": "Unix Makefiles",
+      "binaryDir": "${sourceDir}/build/${presetName}"
+    },
+    {
+      "name": "linux-base",
+      "hidden": true,
+      "inherits": "base",
+      "condition": { "type": "equals", "lhs": "${hostSystemName}", "rhs": "Linux" }
+    },
+    {
+      "name": "linux-release",
+      "displayName": "Linux, release",
+      "inherits": "linux-base",
+      "cacheVariables": { "CMAKE_BUILD_TYPE": "Release" }
+    },
+    {
+      "name": "linux-debug",
+      "displayName": "Linux, debug",
+      "inherits": "linux-base",
+      "cacheVariables": { "CMAKE_BUILD_TYPE": "Debug" }
+    },
+    {
+      "name": "linux-san",
+      "displayName": "Linux, AddressSanitizer and UndefinedBehaviorSanitizer",
+      "inherits": "linux-base",
+      "cacheVariables": { "CMAKE_BUILD_TYPE": "Debug", "EMUCPC_SANITIZE": "ON" }
+    },
+    {
+      "name": "windows-mingw",
+      "displayName": "Windows by MinGW-w64 (-posix), tests under Wine",
+      "inherits": "linux-base",
+      "toolchainFile": "${sourceDir}/cmake/mingw-w64.cmake",
+      "cacheVariables": {
+        "CMAKE_BUILD_TYPE": "Release",
+        "CMAKE_PREFIX_PATH": "$env{HOME}/.cache/emucpc-deps/SDL3-3.4.20-mingw/SDL3-3.4.20/x86_64-w64-mingw32"
+      }
+    },
+    {
+      "name": "macos",
+      "displayName": "macOS, release",
+      "inherits": "base",
+      "condition": { "type": "equals", "lhs": "${hostSystemName}", "rhs": "Darwin" },
+      "cacheVariables": { "CMAKE_BUILD_TYPE": "Release" }
+    }
+  ],
+  "buildPresets": [
+    { "name": "linux-release", "configurePreset": "linux-release" },
+    { "name": "linux-debug", "configurePreset": "linux-debug" },
+    { "name": "linux-san", "configurePreset": "linux-san" },
+    { "name": "windows-mingw", "configurePreset": "windows-mingw" },
+    { "name": "macos", "configurePreset": "macos" }
+  ],
+  "testPresets": [
+    {
+      "name": "base",
+      "hidden": true,
+      "output": { "outputOnFailure": true }
+    },
+    { "name": "linux-release", "inherits": "base", "configurePreset": "linux-release" },
+    { "name": "linux-debug", "inherits": "base", "configurePreset": "linux-debug" },
+    { "name": "linux-san", "inherits": "base", "configurePreset": "linux-san" },
+    { "name": "windows-mingw", "inherits": "base", "configurePreset": "windows-mingw" },
+    { "name": "macos", "inherits": "base", "configurePreset": "macos" }
+  ]
+}
