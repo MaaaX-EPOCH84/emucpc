@@ -1,0 +1,13 @@
+# clang-tidy, run by ci/run.sh on our code (apps/, libs/, devtools/), never
+# on tests/ or third_party/. Checks of § 0.1 of the architecture: no owning
+# raw pointer, no malloc, no mutable global state (all state lives in the
+# machine, the condition of determinism).
+Checks: >
+  -*,
+  bugprone-*,
+  performance-*,
+  cppcoreguidelines-owning-memory,
+  cppcoreguidelines-no-malloc,
+  cppcoreguidelines-avoid-non-const-global-variables
+WarningsAsErrors: '*'
+HeaderFilterRegex: '/(apps|libs|devtools)/'

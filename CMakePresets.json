@@ -48,6 +48,25 @@
       "inherits": "base",
       "condition": { "type": "equals", "lhs": "${hostSystemName}", "rhs": "Darwin" },
       "cacheVariables": { "CMAKE_BUILD_TYPE": "Release" }
+    },
+    {
+      "name": "ci-linux",
+      "displayName": "Local CI: Linux, release, compile commands for clang-tidy",
+      "inherits": "linux-release",
+      "binaryDir": "${sourceDir}/build-ci/linux",
+      "cacheVariables": { "CMAKE_EXPORT_COMPILE_COMMANDS": "ON" }
+    },
+    {
+      "name": "ci-san",
+      "displayName": "Local CI: Linux, AddressSanitizer and UndefinedBehaviorSanitizer",
+      "inherits": "linux-san",
+      "binaryDir": "${sourceDir}/build-ci/san"
+    },
+    {
+      "name": "ci-windows",
+      "displayName": "Local CI: Windows by MinGW-w64, tests under Wine",
+      "inherits": "windows-mingw",
+      "binaryDir": "${sourceDir}/build-ci/windows"
     }
   ],
   "buildPresets": [
@@ -55,7 +74,10 @@
     { "name": "linux-debug", "configurePreset": "linux-debug" },
     { "name": "linux-san", "configurePreset": "linux-san" },
     { "name": "windows-mingw", "configurePreset": "windows-mingw" },
-    { "name": "macos", "configurePreset": "macos" }
+    { "name": "macos", "configurePreset": "macos" },
+    { "name": "ci-linux", "configurePreset": "ci-linux" },
+    { "name": "ci-san", "configurePreset": "ci-san" },
+    { "name": "ci-windows", "configurePreset": "ci-windows" }
   ],
   "testPresets": [
     {
@@ -67,6 +89,14 @@
     { "name": "linux-debug", "inherits": "base", "configurePreset": "linux-debug" },
     { "name": "linux-san", "inherits": "base", "configurePreset": "linux-san" },
     { "name": "windows-mingw", "inherits": "base", "configurePreset": "windows-mingw" },
-    { "name": "macos", "inherits": "base", "configurePreset": "macos" }
+    { "name": "macos", "inherits": "base", "configurePreset": "macos" },
+    { "name": "ci-linux", "inherits": "base", "configurePreset": "ci-linux" },
+    {
+      "name": "ci-san",
+      "inherits": "base",
+      "configurePreset": "ci-san",
+      "filter": { "include": { "label": "fast" } }
+    },
+    { "name": "ci-windows", "inherits": "base", "configurePreset": "ci-windows" }
   ]
 }

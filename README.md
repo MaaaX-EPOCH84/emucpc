@@ -35,6 +35,15 @@ ctest --preset windows-mingw
 Other presets: `linux-debug`, `linux-san` (AddressSanitizer and
 UndefinedBehaviorSanitizer), `macos`.
 
+Local continuous integration, in its own trees under `build-ci/`: Linux
+build and tests, clang-tidy, sanitizer build, Windows build under Wine,
+same bytes under Linux and Windows, checks of the core and of the
+third-party copies. `ci/install-hook.sh` makes it a Git pre-commit hook.
+
+```sh
+ci/run.sh
+```
+
 No ROM is included in this repository.
 
 ## Licence
