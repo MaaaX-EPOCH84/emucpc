@@ -1,4 +1,19 @@
 #!/usr/bin/env bash
+# ================================================================
+#     ______                 __________  ______
+#    / ____/___ ___  __  __/ ____/ __ \/ ____/
+#   / __/ / __ `__ \/ / / / /   / /_/ / /
+#  / /___/ / / / / / /_/ / /___/ ____/ /___
+# /_____/_/ /_/ /_/\__,_/\____/_/    \____/
+#
+# EmuCPC — Amstrad CPC, CPC Plus and GX4000, down to the 1/16 µs
+# ================================================================
+# Author: Maxime MARCONATO (MaaaX^^, aka EPOCH84)
+# ================================================================
+# License: GNU General Public License v3.0 or later — see LICENSE.
+# SPDX-License-Identifier: GPL-3.0-or-later
+# ================================================================
+
 # Installs the Git pre-commit hook that runs the local CI (ci/run.sh) before
 # every commit; a failing CI stops the commit. `git commit --no-verify`
 # skips it, for an emergency. The hook lives outside the repository: install

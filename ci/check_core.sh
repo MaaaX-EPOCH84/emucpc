@@ -1,4 +1,19 @@
 #!/usr/bin/env bash
+# ================================================================
+#     ______                 __________  ______
+#    / ____/___ ___  __  __/ ____/ __ \/ ____/
+#   / __/ / __ `__ \/ / / / /   / /_/ / /
+#  / /___/ / / / / / /_/ / /___/ ____/ /___
+# /_____/_/ /_/ /_/\__,_/\____/_/    \____/
+#
+# EmuCPC — Amstrad CPC, CPC Plus and GX4000, down to the 1/16 µs
+# ================================================================
+# Author: Maxime MARCONATO (MaaaX^^, aka EPOCH84)
+# ================================================================
+# License: GNU General Public License v3.0 or later — see LICENSE.
+# SPDX-License-Identifier: GPL-3.0-or-later
+# ================================================================
+
 # Checks that the core (libraries z80, media, chips, machine, expr) does no
 # I/O, reads no clock, starts no thread, throws and catches no exception.
 # The language has no declarative way to forbid this; three checks stand in:

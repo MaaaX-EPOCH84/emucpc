@@ -1,3 +1,18 @@
+# ================================================================
+#     ______                 __________  ______
+#    / ____/___ ___  __  __/ ____/ __ \/ ____/
+#   / __/ / __ `__ \/ / / / /   / /_/ / /
+#  / /___/ / / / / / /_/ / /___/ ____/ /___
+# /_____/_/ /_/ /_/\__,_/\____/_/    \____/
+#
+# EmuCPC — Amstrad CPC, CPC Plus and GX4000, down to the 1/16 µs
+# ================================================================
+# Author: Maxime MARCONATO (MaaaX^^, aka EPOCH84)
+# ================================================================
+# License: GNU General Public License v3.0 or later — see LICENSE.
+# SPDX-License-Identifier: GPL-3.0-or-later
+# ================================================================
+
 # Unit tests (doctest), one executable per library; benches are separate
 # programs declared to ctest. Labels: fast (every commit), full, local
 # (needs data that is not in the repository), hw (needs the real machine).
@@ -59,6 +74,13 @@ if(CMAKE_SYSTEM_NAME STREQUAL "Linux" AND NOT CMAKE_CROSSCOMPILING)
     add_test(NAME check_third_party_faults
         COMMAND "${EMUCPC_BASH}" "${CMAKE_CURRENT_SOURCE_DIR}/ci/check_third_party_test.sh"
             "${PROJECT_SOURCE_DIR}/ci/check_third_party.sh" "${PROJECT_SOURCE_DIR}/third_party")
+    add_test(NAME check_headers
+        COMMAND "${EMUCPC_BASH}" "${PROJECT_SOURCE_DIR}/ci/check_headers.sh"
+            "${PROJECT_SOURCE_DIR}")
+    add_test(NAME check_headers_faults
+        COMMAND "${EMUCPC_BASH}" "${CMAKE_CURRENT_SOURCE_DIR}/ci/check_headers_test.sh"
+            "${PROJECT_SOURCE_DIR}/ci/check_headers.sh")
     set_tests_properties(check_core check_core_fixtures core_link
-        check_third_party check_third_party_faults PROPERTIES LABELS fast)
+        check_third_party check_third_party_faults check_headers check_headers_faults
+        PROPERTIES LABELS fast)
 endif()

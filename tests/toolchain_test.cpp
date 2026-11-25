@@ -1,3 +1,18 @@
+// ================================================================
+//     ______                 __________  ______
+//    / ____/___ ___  __  __/ ____/ __ \/ ____/
+//   / __/ / __ `__ \/ / / / /   / /_/ / /
+//  / /___/ / / / / / /_/ / /___/ ____/ /___
+// /_____/_/ /_/ /_/\__,_/\____/_/    \____/
+//
+// EmuCPC — Amstrad CPC, CPC Plus and GX4000, down to the 1/16 µs
+// ================================================================
+// Author: Maxime MARCONATO (MaaaX^^, aka EPOCH84)
+// ================================================================
+// License: GNU General Public License v3.0 or later — see LICENSE.
+// SPDX-License-Identifier: GPL-3.0-or-later
+// ================================================================
+
 // Checks of the build chain itself: the third-party copies compile under our
 // warnings, threads work (MinGW -posix model, static winpthreads), and the
 // version header is generated.
