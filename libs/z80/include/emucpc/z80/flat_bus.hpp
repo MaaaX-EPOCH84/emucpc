@@ -15,6 +15,10 @@
 
 // Flat bus for tests: 64 KB of RAM, no wait state, inputs served from a
 // list, every port access and (optionally) every machine cycle logged.
+//
+// It is instantiated in the core library, so it allocates nothing and
+// throws nothing while the CPU runs: the logs are fixed-size buffers that
+// stop filling when full and say so (overflowed()).
 #pragma once
 
 #include <array>
@@ -34,6 +38,37 @@ struct PortAccess {
     friend constexpr bool operator==(const PortAccess&, const PortAccess&) = default;
 };
 
+// Fixed-capacity log: push() keeps the first N entries, then only counts
+// the overflow.
+template <class T, std::size_t N>
+class FixedLog {
+public:
+    void push(const T& v) noexcept {
+        if (size_ < N) {
+            items_[size_++] = v;
+        } else {
+            overflowed_ = true;
+        }
+    }
+    void clear() noexcept {
+        size_ = 0;
+        overflowed_ = false;
+    }
+    [[nodiscard]] std::size_t size() const noexcept { return size_; }
+    [[nodiscard]] bool empty() const noexcept { return size_ == 0; }
+    [[nodiscard]] bool overflowed() const noexcept { return overflowed_; }
+    [[nodiscard]] const T& operator[](std::size_t k) const noexcept { return items_[k]; }
+    [[nodiscard]] const T& front() const noexcept { return items_[0]; }
+    [[nodiscard]] const T& back() const noexcept { return items_[size_ - 1]; }
+    [[nodiscard]] const T* begin() const noexcept { return items_.data(); }
+    [[nodiscard]] const T* end() const noexcept { return items_.data() + size_; }
+
+private:
+    std::array<T, N> items_{};
+    std::size_t size_ = 0;
+    bool overflowed_ = false;
+};
+
 struct BusAccess {
     Cycle cycle;
     std::uint16_t address = 0;
@@ -47,9 +82,9 @@ public:
     std::array<std::uint8_t, 0x10000> memory{};
     std::vector<std::uint8_t> inputs;  // values of the next inputs, in order
     std::uint8_t default_input = 0xFF;  // when `inputs` is exhausted
-    std::vector<PortAccess> ports;      // every input and output
+    FixedLog<PortAccess, 64> ports;  // every input and output
     bool record_cycles = false;
-    std::vector<BusAccess> cycles;  // every machine cycle, when record_cycles
+    FixedLog<BusAccess, 256> cycles;  // every machine cycle, when record_cycles
 
     bool int_active = false;         // level of INT
     std::uint8_t int_vector = 0xFF;  // data bus during the acknowledge
@@ -69,12 +104,12 @@ public:
         if (next_input_ < inputs.size()) {
             v = inputs[next_input_++];
         }
-        ports.push_back(PortAccess{port, v, false});
+        ports.push(PortAccess{port, v, false});
         return log(c, port, v);
     }
 
     void io_write(const Cycle& c, std::uint16_t port, std::uint8_t v) noexcept {
-        ports.push_back(PortAccess{port, v, true});
+        ports.push(PortAccess{port, v, true});
         static_cast<void>(log(c, port, v));
     }
 
@@ -89,9 +124,9 @@ public:
 private:
     std::size_t next_input_ = 0;
 
-    std::uint8_t log(const Cycle& c, std::uint16_t a, std::uint8_t v) {
+    std::uint8_t log(const Cycle& c, std::uint16_t a, std::uint8_t v) noexcept {
         if (record_cycles) {
-            cycles.push_back(BusAccess{c, a, v});
+            cycles.push(BusAccess{c, a, v});
         }
         return v;
     }

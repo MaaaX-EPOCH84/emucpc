@@ -278,7 +278,8 @@ std::vector<Sample> expected_samples(const json& cycles) {
     return out;
 }
 
-std::vector<Sample> actual_samples(const std::vector<BusAccess>& accesses, Tick start) {
+template <class Log>
+std::vector<Sample> actual_samples(const Log& accesses, Tick start) {
     std::vector<Sample> out;
     for (const BusAccess& a : accesses) {
         Sample s;
@@ -359,7 +360,11 @@ std::string run_case(const json& test, const Options& options) {
                       "!=" + std::to_string(bus->memory[address]));
         }
     }
-    if (bus->ports != expected_ports) {
+    const std::vector<PortAccess> ports(bus->ports.begin(), bus->ports.end());
+    if (bus->ports.overflowed() || bus->cycles.overflowed()) {
+        diff.note("bus log overflowed");
+    }
+    if (ports != expected_ports) {
         diff.note("ports differ (" + std::to_string(expected_ports.size()) + " expected, " +
                   std::to_string(bus->ports.size()) + " done)");
     }
