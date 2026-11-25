@@ -10,4 +10,8 @@ Checks: >
   cppcoreguidelines-no-malloc,
   cppcoreguidelines-avoid-non-const-global-variables
 WarningsAsErrors: '*'
+CheckOptions:
+  # Two adjacent parameters of the same type are the rule in the CPU and
+  # chip helpers (value, bit; high, low); from three on, the check stays.
+  bugprone-easily-swappable-parameters.MinimumLength: 3
 HeaderFilterRegex: '/(apps|libs|devtools)/'

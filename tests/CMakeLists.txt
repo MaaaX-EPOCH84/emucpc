@@ -8,6 +8,11 @@ target_link_libraries(emucpc_test_toolchain PRIVATE
 add_test(NAME toolchain COMMAND emucpc_test_toolchain)
 set_tests_properties(toolchain PROPERTIES LABELS fast)
 
+add_executable(emucpc_test_z80 z80_test.cpp)
+target_link_libraries(emucpc_test_z80 PRIVATE emucpc::settings emucpc::z80 emucpc::doctest)
+add_test(NAME z80 COMMAND emucpc_test_z80)
+set_tests_properties(z80 PROPERTIES LABELS fast)
+
 add_test(NAME emucpc_version COMMAND emucpc --version)
 set_tests_properties(emucpc_version PROPERTIES
     LABELS fast PASS_REGULAR_EXPRESSION "^EmuCPC [^\r\n]+\n$")

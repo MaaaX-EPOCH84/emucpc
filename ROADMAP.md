@@ -8,9 +8,11 @@ l'arrivée sur l'étape. Le plan de l'archive (EmuCPC sur CPCEC) est dans
 
 Statut : ⬜ à faire · 🔶 en cours · ✅ fait · ❌ annulé
 
+Curseur : P4
+
 | # | id | Étape | Contenu | État |
 |---|---|---|---|---|
-| 1 | E1 | Squelette et Z80 | Dépôt public, CMake, CI, Z80 exact contre SingleStepTests | ⬜ |
+| 1 | E1 | Squelette et Z80 | Dépôt public, CMake, CI, Z80 exact contre SingleStepTests | 🔶 |
 | 2 | E2 | Z80 au tick | Cycles machine au 1/16 µs, z80test, SSM, variantes NEC et ST | ⬜ |
 | 3 | E3 | Phases et vitesse | Gate array 40010 de référence, modèle rapide, banc ≥ 800 M ticks/s | ⬜ |
 | 4 | E4 | Banc de la vraie machine | M4, identification, cartouche système, capture RVB, Hantek (dès la M4) | ⬜ |
@@ -27,6 +29,7 @@ Statut : ⬜ à faire · 🔶 en cours · ✅ fait · ❌ annulé
 | 15 | E15 | Assembleur | Assembleur et désassembleur, mêmes octets que rasm | ⬜ |
 | 16 | E16 | Justesse sur la machine | Campagne des questions Q par la M4, le DHO804, le Hantek | ⬜ |
 | 17 | E17 | Création | Éditeur graphique, tracker, extensions | ⬜ |
+| 18 | E18 | Cartes son d'extension | Carte maison émulée et paramétrable (nombre d'AY, horloges, côté de chaque canal, ports), PlayCity comme cas particulier ; matériel dans son propre projet ; sujet annexe | ⬜ |
 
 ## Étape 1 — Squelette et Z80  [E1]
 
@@ -39,8 +42,11 @@ Statut : ⬜ à faire · 🔶 en cours · ✅ fait · ❌ annulé
     - Fait le 2026-11-22. Décidé en plus : préréglages `ci-linux` (avec `compile_commands.json`), `ci-san` (tests `fast`), `ci-windows`, arbres dans `build-ci/` ; `check_core.sh` attend l'archive en `<build>/libs/<lib>/libemucpc_<lib>.a` et compte une archive absente comme faute ; liste de symboles interdits étendue (E/S de stdio, fils, horloges, `std::chrono::*::now`, `random_device`, flux standard, maths) ; `ci/same_bytes.sh` produit lui-même les deux dossiers de sorties, liste `cases` ; témoins des contrôles déclarés à ctest (`tests/ci/`).
     - Écarté : chercher les archives du cœur n'importe où dans l'arbre (aurait trouvé les témoins) ; `nm` dont les erreurs sont tues ; préréglages de la CI dans `build/` ; JSON des préréglages réécrit en entier (forme compacte gardée).
     - Atteste : `ci/run.sh` vert, 13 étapes, 33 s à froid, 8 s sans changement, 42 s depuis une copie propre ; 8 tests Linux, 8 sous ASan + UBSan, 3 sous Wine ; `--help` identique à l'octet (114 octets) ; défauts plantés puis retirés, chacun refusé par sa propre étape : variable inutilisée (construction), `new` nu (clang-tidy), dépassement signé (UBSan), `<thread>` dans `libs/z80` (`check_core`), octet de `doctest.h` (`check_third_party`), sortie propre à Windows (`same-bytes`) ; hook `pre-commit` posé, lancé à la main avec un défaut : statut 1.
-1.3 ⬜ [P3] Z80 exact en résultats — toutes les instructions, WZ, Q, IFF, IM, HALT, sur un bus plat ; tests doctest ; banc `emucpc-ssts` sur SingleStepTests, échantillon en CI, suite entière à la demande
-1.4 ⬜ [P4] Dépôt public — `MaaaX-EPOCH84/emucpc` sur GitHub et workflow Linux, Windows, macOS sans ROM ; création avec l'accord de MaaaX au moment de la faire
+1.3 ✅ [P3] Z80 exact en résultats — toutes les instructions, WZ, Q, IFF, IM, HALT, sur un bus plat ; tests doctest ; banc `emucpc-ssts` sur SingleStepTests, échantillon en CI, suite entière à la demande
+    - Fait le 2026-11-24. Décidé (MaaaX) : concept `Bus` du § 2.2 posé dès P3, un appel par cycle machine, `Cycle` (avec `kind`) daté aux durées nominales, 4 ticks par T, sans attente, `ready` non échantillonné avant E2 ; décodeur en `switch` écrit à la main par préfixe, opérandes par les bits de l'opcode, DD/FD par le décodeur principal instancié sur `Index` (hl, ix, iy), DDCB en branche à part ; `FlatBus` dans `libs/z80`, instancié dans la bibliothèque (`extern template`) ; banc `devtools/emucpc-ssts` lu par SAX et arrêté au n-ième cas, fichiers sur les cœurs, codes 0/1/2/77 ; `fast` = 10 premiers cas de chaque fichier avec l'activité du bus (`--cycles`, ajouté à l'échantillon après qu'un défaut de timing planté y a échappé), `full` = tout ; dossier par la variable de cache `EMUCPC_SSTS_DIR`, test sauté sans données ; Q remis à 0 par un préfixe DD/FD ; `enable_testing()` avant les sous-dossiers ; préréglages `ci-linux` et `ci-windows` filtrés sur `fast` ; `bugprone-easily-swappable-parameters` à partir de 3 paramètres.
+    - Écarté : table de pointeurs de fonction (appel indirect, bus non mis en ligne) ; code généré (outil de plus ; repli si `emucpc-bench` déçoit en E3) ; bus minimal sans `Cycle` (décodeur à reprendre en E2) ; un cas sur cent (57 s de lecture JSON à chaque commit) ; cache de l'échantillon dans `build-ci/` (inutile) ; échantillon versionné (≈ 13,7 Mo, à revoir en P4) ; variantes NEC et ST (E2).
+    - Atteste : SingleStepTests `ebe1875` entier, 1 604 000 cas verts, état final, RAM, ports et activité du bus T par T (`ctest -L full`, 18 s sur 8 cœurs) ; échantillon de 16 040 cas vert sous Linux (0,25 s), ASan + UBSan (9,7 s) et Wine (1,6 s) ; 13 tests doctest (98 assertions) verts ; `check_core.sh` sur `libs/z80` (4 fichiers, 1 archive) ; clang-tidy propre ; CI locale verte en 31 s ; défauts plantés puis retirés, attrapés : T interne d'`INC (HL)` (par `--cycles`), WZ de `LD A,(BC)` ; sans données, ctest affiche « Skipped ». Limite connue : en IM 0, opérandes d'une instruction longue lus en mémoire.
+1.4 🔶 [P4] Dépôt public — `MaaaX-EPOCH84/emucpc` sur GitHub et workflow Linux, Windows, macOS sans ROM ; création avec l'accord de MaaaX au moment de la faire
 
 ## Étape 2 — Z80 au tick  [E2]
 
@@ -73,3 +79,5 @@ Statut : ⬜ à faire · 🔶 en cours · ✅ fait · ❌ annulé
 ## Étape 16 — Justesse sur la machine  [E16]
 
 ## Étape 17 — Création  [E17]
+
+## Étape 18 — Cartes son d'extension  [E18]

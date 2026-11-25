@@ -45,8 +45,12 @@ add_library(emucpc::version ALIAS emucpc_version)
 target_include_directories(emucpc_version INTERFACE "${EMUCPC_GENERATED_DIR}")
 add_dependencies(emucpc_version emucpc_version_header)
 
-add_subdirectory(third_party)
-add_subdirectory(apps/emucpc)
-
+# Before any subdirectory: add_test() is ignored where testing is not yet
+# enabled (the benches of devtools/ declare their own tests).
 enable_testing()
+
+add_subdirectory(third_party)
+add_subdirectory(libs/z80)
+add_subdirectory(apps/emucpc)
+add_subdirectory(devtools/emucpc-ssts)
 add_subdirectory(tests)

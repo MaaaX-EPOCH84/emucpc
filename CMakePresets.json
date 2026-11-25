@@ -90,13 +90,23 @@
     { "name": "linux-san", "inherits": "base", "configurePreset": "linux-san" },
     { "name": "windows-mingw", "inherits": "base", "configurePreset": "windows-mingw" },
     { "name": "macos", "inherits": "base", "configurePreset": "macos" },
-    { "name": "ci-linux", "inherits": "base", "configurePreset": "ci-linux" },
+    {
+      "name": "ci-linux",
+      "inherits": "base",
+      "configurePreset": "ci-linux",
+      "filter": { "include": { "label": "fast" } }
+    },
     {
       "name": "ci-san",
       "inherits": "base",
       "configurePreset": "ci-san",
       "filter": { "include": { "label": "fast" } }
     },
-    { "name": "ci-windows", "inherits": "base", "configurePreset": "ci-windows" }
+    {
+      "name": "ci-windows",
+      "inherits": "base",
+      "configurePreset": "ci-windows",
+      "filter": { "include": { "label": "fast" } }
+    }
   ]
 }

@@ -44,6 +44,17 @@ third-party copies. `ci/install-hook.sh` makes it a Git pre-commit hook.
 ci/run.sh
 ```
 
+Tests are labelled `fast` (every commit), `full` (on demand) and `local`
+(they need data that is not in this repository). The Z80 is checked
+against [SingleStepTests](https://github.com/SingleStepTests/z80), whose
+`v1/` folder is looked for in `EMUCPC_SSTS_DIR` (CMake cache variable,
+initialised from the environment); without it those tests are skipped.
+
+```sh
+ctest --preset linux-release -L fast    # the 10 first cases of each file
+ctest --preset linux-release -L full    # all 1 604 000 cases, bus activity included
+```
+
 No ROM is included in this repository.
 
 ## Licence
