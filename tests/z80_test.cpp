@@ -18,21 +18,44 @@
 #define DOCTEST_CONFIG_IMPLEMENT_WITH_MAIN
 #include <cstdint>
 #include <initializer_list>
+#include <string>
 #include <vector>
 
 #include <doctest/doctest.h>
 
 #include <emucpc/z80/flat_bus.hpp>
+#include <emucpc/z80/pins.hpp>
 
 namespace {
 
 using emucpc::z80::Cpu;
+using emucpc::z80::Cycle;
 using emucpc::z80::CycleKind;
 using emucpc::z80::FlatBus;
+using emucpc::z80::Pins;
 using emucpc::z80::Tick;
 using emucpc::z80::ticks_per_t;
 
 constexpr std::uint8_t PF = 0x04;
+
+// One pin over a cycle, a character per tick from T1: '_' active, '-' not.
+std::string wave(const Cycle& c, bool Pins::*pin) {
+    std::string out;
+    for (std::uint64_t t = c.t1.value; t < c.end.value; ++t) {
+        out += emucpc::z80::pins_at(c, Tick{t}).*pin ? '_' : '-';
+    }
+    return out;
+}
+
+// The address bus over a cycle, one value per T state (sampled on its
+// falling edge).
+std::vector<std::uint16_t> addresses(const Cycle& c) {
+    std::vector<std::uint16_t> out;
+    for (std::uint64_t t = c.t1.value + ticks_per_t / 2; t < c.end.value; t += ticks_per_t) {
+        out.push_back(emucpc::z80::pins_at(c, Tick{t}).address);
+    }
+    return out;
+}
 
 struct Machine {
     Cpu cpu;
@@ -208,7 +231,7 @@ TEST_CASE("HALT: M1 cycles at the next byte, PC held, R counted; INT resumes aft
     CHECK(m.cpu.pc == 1);
     CHECK(m.cpu.a == a);  // the INC A under PC is not executed
     CHECK(m.cpu.r == r + 3);
-    CHECK(m.bus.cycles.back().address == 1);
+    CHECK(m.bus.cycles.back().cycle.address == 1);
     m.bus.int_active = true;
     CHECK(m.step() == 4);  // one more M1 of HALT, at whose end INT is sampled
     CHECK(m.step() == 13);
@@ -431,4 +454,109 @@ TEST_CASE("nominal edges of a memory write and of an output") {
     CHECK(o.wr == o.iorq);
     CHECK(o.end.value == o.t1.value + 16);
     CHECK(m.bus.ports.back().port == ((m.cpu.a << 8) | 0x10));
+}
+
+TEST_CASE("pins of an opcode fetch: M1, MREQ, RD, then refresh at I.R, held through internal T states") {
+    Machine m;
+    m.cpu.pc = 0x0100;
+    m.cpu.i = 0x12;
+    m.cpu.r = 0xB4;  // bit 7 is kept on A7
+    m.load(0x0100, {0x03});  // INC BC: M1 then 2 internal T states
+    m.bus.record_cycles = true;
+    CHECK(m.step() == 6);
+    REQUIRE(m.bus.cycles.size() == 1);
+    const Cycle& c = m.bus.cycles[0].cycle;
+    CHECK(c.address == 0x0100);
+    CHECK(c.refresh == 0x12B4);
+    CHECK(m.cpu.r == 0xB5);
+    CHECK(wave(c, &Pins::m1) == "________--------");
+    CHECK(wave(c, &Pins::mreq) == "--______--____--");
+    CHECK(wave(c, &Pins::rd) == "--______--------");
+    CHECK(wave(c, &Pins::rfsh) == "--------________");
+    CHECK(wave(c, &Pins::iorq) == "----------------");
+    CHECK(wave(c, &Pins::wr) == "----------------");
+    CHECK(addresses(c) == std::vector<std::uint16_t>{0x0100, 0x0100, 0x12B4, 0x12B4});
+    const std::vector<Cycle> cycles{c};
+    for (std::uint64_t t = 16; t < 24; ++t) {
+        const Pins p = emucpc::z80::pins_at(cycles, Tick{t}, 0);
+        CHECK(p == Pins{0x12B4});  // everything inactive, refresh address held
+    }
+    CHECK(emucpc::z80::pins_at(cycles, Tick{0}, 0x5555).address == 0x0100);
+}
+
+TEST_CASE("pins of a memory read with one Tw, and of a write: released on the falling edge of T3") {
+    Machine m;
+    m.cpu.set_bc(0x4000);
+    m.load(0x0000, {0x0A, 0x02});  // LD A,(BC); LD (BC),A
+    m.bus.memory[0x4000] = 0x5A;
+    m.bus.wait_from = Tick{22};  // the read samples WAIT at tick 16 + 6
+    m.bus.wait_until = Tick{23};
+    m.bus.record_cycles = true;
+    CHECK(m.step() == 8);
+    REQUIRE(m.bus.cycles.size() == 2);
+    const Cycle& rd = m.bus.cycles[1].cycle;
+    CHECK(rd.kind == CycleKind::read);
+    CHECK(rd.address == 0x4000);
+    CHECK(rd.refresh == 0);
+    CHECK(wave(rd, &Pins::mreq) == "--____________--");
+    CHECK(wave(rd, &Pins::rd) == "--____________--");
+    CHECK(wave(rd, &Pins::m1) == "----------------");
+    CHECK(addresses(rd) == std::vector<std::uint16_t>{0x4000, 0x4000, 0x4000, 0x4000});
+    CHECK(m.step() == 7);
+    REQUIRE(m.bus.cycles.size() == 4);
+    const Cycle& wr = m.bus.cycles[3].cycle;
+    CHECK(wr.kind == CycleKind::write);
+    CHECK(wave(wr, &Pins::mreq) == "--________--");
+    CHECK(wave(wr, &Pins::wr) == "------____--");
+    CHECK(wave(wr, &Pins::rd) == "------------");
+    const std::vector<Cycle> cycles{m.bus.cycles[2].cycle, wr};
+    CHECK(emucpc::z80::pins_at(cycles, wr.end, 0).address == 0x4000);  // held after the write
+}
+
+TEST_CASE("pins of an input and an output: IORQ from T2 to the falling edge of T3") {
+    Machine m;
+    m.cpu.a = 0x7F;
+    m.load(0x0000, {0xDB, 0x10, 0xD3, 0x20});  // IN A,(10h); OUT (20h),A
+    m.bus.inputs = {0x99};
+    m.bus.record_cycles = true;
+    CHECK(m.step() == 11);
+    REQUIRE(m.bus.cycles.size() == 3);
+    const Cycle& in = m.bus.cycles[2].cycle;
+    CHECK(in.kind == CycleKind::io_read);
+    CHECK(in.address == 0x7F10);
+    CHECK(wave(in, &Pins::iorq) == "----__________--");
+    CHECK(wave(in, &Pins::rd) == "----__________--");
+    CHECK(wave(in, &Pins::mreq) == "----------------");
+    CHECK(m.step() == 11);
+    REQUIRE(m.bus.cycles.size() == 6);
+    const Cycle& out = m.bus.cycles[5].cycle;
+    CHECK(out.kind == CycleKind::io_write);
+    CHECK(out.address == 0x9920);
+    CHECK(wave(out, &Pins::iorq) == "----__________--");
+    CHECK(wave(out, &Pins::wr) == "----__________--");
+}
+
+TEST_CASE("pins of an interrupt acknowledge: M1, IORQ from the first automatic wait state, then refresh") {
+    Machine m;
+    m.cpu.im = 1;
+    m.cpu.sp = 0x8000;
+    m.cpu.iff1 = m.cpu.iff2 = true;
+    m.cpu.i = 0x3F;
+    m.bus.int_active = true;
+    m.bus.record_cycles = true;
+    CHECK(m.step() == 4);  // NOP, INT sampled at its end
+    const std::uint8_t r = m.cpu.r;
+    CHECK(m.step() == 13);
+    REQUIRE(m.bus.cycles.size() >= 2);
+    const Cycle& ack = m.bus.cycles[1].cycle;
+    CHECK(ack.kind == CycleKind::int_ack);
+    CHECK(ack.address == 0x0001);
+    CHECK(ack.refresh == (0x3F00 | r));
+    CHECK(wave(ack, &Pins::m1) == "________________--------");
+    CHECK(wave(ack, &Pins::iorq) == "----------______--------");
+    CHECK(wave(ack, &Pins::mreq) == "------------------____--");
+    CHECK(wave(ack, &Pins::rd) == "------------------------");
+    CHECK(wave(ack, &Pins::rfsh) == "----------------________");
+    CHECK(addresses(ack) ==
+          std::vector<std::uint16_t>{0x0001, 0x0001, 0x0001, 0x0001, ack.refresh, ack.refresh});
 }

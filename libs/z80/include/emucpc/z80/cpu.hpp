@@ -60,8 +60,14 @@ enum class CycleKind : std::uint8_t {
 // One machine cycle that drives the bus: tick of the start of T1 and tick of
 // the active (falling) edge of each control signal, `never` for a signal
 // that stays inactive during the cycle; `end` is the end of its last T state.
+// `address` is the address (or port) of the access, the one the bus call
+// receives; `refresh` is I·R, put on the address bus in T3 and T4 of an
+// opcode fetch or an interrupt acknowledge (0 for the other kinds). The
+// level of every pin at any tick follows from these: <emucpc/z80/pins.hpp>.
 struct Cycle {
     CycleKind kind = CycleKind::opcode;
+    std::uint16_t address = 0;
+    std::uint16_t refresh = 0;
     Tick t1;
     Tick mreq = never;
     Tick iorq = never;

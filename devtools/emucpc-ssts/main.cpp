@@ -19,7 +19,9 @@
 // RAM, port accesses and bus activity T state by T state. A case runs one
 // step() on the flat bus and compares the final registers (WZ, Q, P, EI
 // included), the RAM and the port accesses; with --cycles, also the number
-// of T states and the position, address and value of every bus access.
+// of T states and every sample of the bus activity, one per T state:
+// address bus (the refresh address and the address held through internal
+// T states included), data and access marker.
 //
 // Usage: emucpc-ssts [--dir <dir>] [--cases <n>] [--jobs <n>] [--cycles]
 //                    [--match <text>] [--report <n>]
@@ -42,6 +44,7 @@
 #include <fstream>
 #include <iostream>
 #include <memory>
+#include <optional>
 #include <sstream>
 #include <string>
 #include <string_view>
@@ -52,6 +55,7 @@
 #include <nlohmann/json.hpp>
 
 #include <emucpc/z80/flat_bus.hpp>
+#include <emucpc/z80/pins.hpp>
 
 namespace {
 
@@ -59,6 +63,7 @@ namespace fs = std::filesystem;
 using json = nlohmann::json;
 using emucpc::z80::BusAccess;
 using emucpc::z80::Cpu;
+using emucpc::z80::Cycle;
 using emucpc::z80::CycleKind;
 using emucpc::z80::FlatBus;
 using emucpc::z80::PortAccess;
@@ -240,76 +245,99 @@ void compare_state(Diff& diff, const Cpu& cpu, const json& s) {
     diff.check("q", byte_of(s, "q"), cpu.q);
 }
 
-// One bus access as SingleStepTests samples it: T state of the sample where
-// the control signals are active, address, value, and pins ("r-m-"...).
+// One entry of the "cycles" array, a sample per T state: address bus, data
+// bus (when SingleStepTests records it) and the access marker ("r-m-",
+// "-wm-", "r--i", "-w-i", or "----"). The marker is a convention, not a
+// pin level: it is set on one T state of each access, T2 for memory and
+// opcode, the automatic wait state for I/O; the data of a read is on the
+// sample after the marker, that of a write on the marker.
 struct Sample {
-    std::size_t t = 0;
-    std::uint16_t address = 0;
-    std::uint8_t value = 0;
-    std::string pins;
+    std::optional<std::uint16_t> address;
+    std::optional<std::uint8_t> data;
+    std::string pins = "----";
 
     friend bool operator==(const Sample&, const Sample&) = default;
 };
 
 std::string to_string(const Sample& s) {
     std::ostringstream o;
-    o << 'T' << s.t << ':' << s.pins << '@' << s.address << '=' << +s.value;
+    o << s.pins << '@';
+    if (s.address) {
+        o << std::hex << *s.address;
+    } else {
+        o << '-';
+    }
+    if (s.data) {
+        o << '=' << std::hex << +*s.data;
+    }
     return o.str();
 }
 
-// From the "cycles" array: the data of a read is on the sample after the
-// active one, the data of a write on the active one.
 std::vector<Sample> expected_samples(const json& cycles) {
     std::vector<Sample> out;
-    for (std::size_t t = 0; t < cycles.size(); ++t) {
-        const json& entry = cycles[t];
-        const auto pins = entry.at(2).get<std::string>();
-        if (pins == "----") {
-            continue;
-        }
+    out.reserve(cycles.size());
+    for (const json& entry : cycles) {
         Sample s;
-        s.t = t;
-        s.address = entry.at(0).get<std::uint16_t>();
-        s.pins = pins;
-        const json& data = pins[0] == 'r' && t + 1 < cycles.size() ? cycles[t + 1].at(1) : entry.at(1);
-        s.value = data.is_null() ? std::uint8_t{0} : data.get<std::uint8_t>();
+        if (!entry.at(0).is_null()) {
+            s.address = entry.at(0).get<std::uint16_t>();
+        }
+        if (!entry.at(1).is_null()) {
+            s.data = entry.at(1).get<std::uint8_t>();
+        }
+        s.pins = entry.at(2).get<std::string>();
         out.push_back(std::move(s));
     }
     return out;
 }
 
+// The same samples rebuilt from the machine cycles: the address bus is read
+// from the pins at the falling edge of each T state (<emucpc/z80/pins.hpp>);
+// marker and data follow the convention above.
 template <class Log>
-std::vector<Sample> actual_samples(const Log& accesses, Tick start) {
-    std::vector<Sample> out;
+std::vector<Sample> actual_samples(const Log& accesses, Tick start, std::size_t t_states) {
+    std::vector<Cycle> cycles;
     for (const BusAccess& a : accesses) {
-        Sample s;
+        cycles.push_back(a.cycle);
+    }
+    std::vector<Sample> out(t_states);
+    for (std::size_t k = 0; k < t_states; ++k) {
+        const Tick edge = start + (k * ticks_per_t + ticks_per_t / 2);
+        out[k].address = emucpc::z80::pins_at(cycles, edge, 0).address;
+    }
+    const auto mark = [&out](std::uint64_t k, const char* pins) {
+        if (k < out.size()) {
+            out[k].pins = pins;
+        }
+    };
+    const auto put = [&out](std::uint64_t k, std::uint8_t v) {
+        if (k < out.size()) {
+            out[k].data = v;
+        }
+    };
+    for (const BusAccess& a : accesses) {
         const std::uint64_t t1 = (a.cycle.t1.value - start.value) / ticks_per_t;
         switch (a.cycle.kind) {
         case CycleKind::opcode:
         case CycleKind::read:
-            s.t = static_cast<std::size_t>(t1 + 1);
-            s.pins = "r-m-";
+            mark(t1 + 1, "r-m-");
+            put(t1 + 2, a.value);
             break;
         case CycleKind::write:
-            s.t = static_cast<std::size_t>(t1 + 1);
-            s.pins = "-wm-";
+            mark(t1 + 1, "-wm-");
+            put(t1 + 1, a.value);
             break;
         case CycleKind::io_read:
-            s.t = static_cast<std::size_t>(t1 + 2);
-            s.pins = "r--i";
+            mark(t1 + 2, "r--i");
+            put(t1 + 3, a.value);
             break;
         case CycleKind::io_write:
-            s.t = static_cast<std::size_t>(t1 + 2);
-            s.pins = "-w-i";
+            mark(t1 + 2, "-w-i");
+            put(t1 + 2, a.value);
             break;
         case CycleKind::int_ack:
-            s.t = static_cast<std::size_t>(t1 + 2);
-            s.pins = "int";
+            mark(t1 + 2, "int");
             break;
         }
-        s.address = a.address;
-        s.value = a.value;
-        out.push_back(std::move(s));
     }
     return out;
 }
@@ -373,17 +401,17 @@ std::string run_case(const json& test, const Options& options) {
         const std::uint64_t t_states = (cpu.now.value - start.value) / ticks_per_t;
         diff.check("T", static_cast<std::uint64_t>(cycles.size()), t_states);
         const std::vector<Sample> expected = expected_samples(cycles);
-        const std::vector<Sample> actual = actual_samples(bus->cycles, start);
-        if (expected != actual) {
-            std::string text = "bus:";
-            for (const Sample& s : expected) {
-                text += ' ' + to_string(s);
+        const std::vector<Sample> actual = actual_samples(bus->cycles, start, expected.size());
+        for (std::size_t k = 0; k < expected.size(); ++k) {
+            const Sample& e = expected[k];
+            Sample a = actual[k];
+            if (!e.address) {
+                a.address.reset();  // not recorded: not compared
             }
-            text += " / got:";
-            for (const Sample& s : actual) {
-                text += ' ' + to_string(s);
+            if (e != a) {
+                diff.note("T" + std::to_string(k) + " " + to_string(e) + "!=" + to_string(a));
+                break;
             }
-            diff.note(text);
         }
     }
     if (diff.ok()) {

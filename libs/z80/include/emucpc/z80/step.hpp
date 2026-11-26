@@ -144,7 +144,7 @@ private:
     // Tw of 4 ticks inserted for each sample where READY is false. A bus
     // that holds READY forever would hang the CPU, as on the real chip; past
     // 65535 Tw the cycle goes on (a fault of the bus, not a CPU state).
-    Cycle begin(CycleKind kind) noexcept {
+    Cycle begin(CycleKind kind, std::uint16_t address) noexcept {
         constexpr std::uint64_t half = ticks_per_t / 2;
         unsigned t_states = 3;
         std::uint64_t sample = ticks_per_t + half;  // falling edge of T2
@@ -171,12 +171,16 @@ private:
         }
         Cycle cy;
         cy.kind = kind;
+        cy.address = address;
         cy.t1 = c_.now;
         cy.end = c_.now + (t_states + waits) * std::uint64_t{ticks_per_t};
         switch (kind) {
         case CycleKind::opcode:
-        case CycleKind::read:
+            cy.refresh = u16((c_.i << 8) | c_.r);
             cy.mreq = cy.rd = c_.now + half;  // falling edge of T1
+            break;
+        case CycleKind::read:
+            cy.mreq = cy.rd = c_.now + half;
             break;
         case CycleKind::write:
             cy.mreq = c_.now + half;
@@ -189,6 +193,7 @@ private:
             cy.iorq = cy.wr = c_.now + ticks_per_t;
             break;
         case CycleKind::int_ack:
+            cy.refresh = u16((c_.i << 8) | c_.r);
             cy.iorq = c_.now + 2 * ticks_per_t + half;  // first automatic wait state
             break;
         }
@@ -198,7 +203,7 @@ private:
     void bump_r() noexcept { c_.r = u8((c_.r & 0x80U) | ((c_.r + 1U) & 0x7FU)); }
 
     std::uint8_t fetch() noexcept {
-        const Cycle cy = begin(CycleKind::opcode);
+        const Cycle cy = begin(CycleKind::opcode, c_.pc);
         const std::uint8_t op = bus_.fetch(cy, c_.pc);
         c_.pc = u16(c_.pc + 1U);
         bump_r();
@@ -207,27 +212,27 @@ private:
     }
 
     std::uint8_t read(std::uint16_t address) noexcept {
-        const Cycle cy = begin(CycleKind::read);
+        const Cycle cy = begin(CycleKind::read, address);
         const std::uint8_t v = bus_.read(cy, address);
         c_.now = cy.end;
         return v;
     }
 
     void write(std::uint16_t address, std::uint8_t v) noexcept {
-        const Cycle cy = begin(CycleKind::write);
+        const Cycle cy = begin(CycleKind::write, address);
         bus_.write(cy, address, v);
         c_.now = cy.end;
     }
 
     std::uint8_t in(std::uint16_t port) noexcept {
-        const Cycle cy = begin(CycleKind::io_read);
+        const Cycle cy = begin(CycleKind::io_read, port);
         const std::uint8_t v = bus_.io_read(cy, port);
         c_.now = cy.end;
         return v;
     }
 
     void out(std::uint16_t port, std::uint8_t v) noexcept {
-        const Cycle cy = begin(CycleKind::io_write);
+        const Cycle cy = begin(CycleKind::io_write, port);
         bus_.io_write(cy, port, v);
         c_.now = cy.end;
     }
@@ -291,7 +296,7 @@ private:
             c_.f = u8(c_.f & ~unsigned{PF});
         }
         c_.iff1 = c_.iff2 = false;
-        const Cycle cy = begin(CycleKind::int_ack);  // M1 with two automatic wait states
+        const Cycle cy = begin(CycleKind::int_ack, c_.pc);  // M1 with two automatic wait states
         const std::uint8_t v = bus_.int_ack(cy);
         bump_r();
         c_.now = cy.end;

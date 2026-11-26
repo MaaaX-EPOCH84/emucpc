@@ -69,9 +69,9 @@ private:
     bool overflowed_ = false;
 };
 
+// One machine cycle and the byte it carried (the address is in the cycle).
 struct BusAccess {
     Cycle cycle;
-    std::uint16_t address = 0;
     std::uint8_t value = 0;
 
     friend constexpr bool operator==(const BusAccess&, const BusAccess&) = default;
@@ -106,11 +106,11 @@ public:
         return !(t >= wait_from && t < wait_until);
     }
 
-    std::uint8_t fetch(const Cycle& c, std::uint16_t a) noexcept { return log(c, a, memory[a]); }
-    std::uint8_t read(const Cycle& c, std::uint16_t a) noexcept { return log(c, a, memory[a]); }
+    std::uint8_t fetch(const Cycle& c, std::uint16_t a) noexcept { return log(c, memory[a]); }
+    std::uint8_t read(const Cycle& c, std::uint16_t a) noexcept { return log(c, memory[a]); }
     void write(const Cycle& c, std::uint16_t a, std::uint8_t v) noexcept {
         memory[a] = v;
-        static_cast<void>(log(c, a, v));
+        static_cast<void>(log(c, v));
     }
 
     std::uint8_t io_read(const Cycle& c, std::uint16_t port) noexcept {
@@ -119,15 +119,15 @@ public:
             v = inputs[next_input_++];
         }
         ports.push(PortAccess{port, v, false});
-        return log(c, port, v);
+        return log(c, v);
     }
 
     void io_write(const Cycle& c, std::uint16_t port, std::uint8_t v) noexcept {
         ports.push(PortAccess{port, v, true});
-        static_cast<void>(log(c, port, v));
+        static_cast<void>(log(c, v));
     }
 
-    std::uint8_t int_ack(const Cycle& c) noexcept { return log(c, 0, int_vector); }
+    std::uint8_t int_ack(const Cycle& c) noexcept { return log(c, int_vector); }
     bool int_line(Tick t) noexcept {
         if (record_cycles) {
             int_samples.push(t);
@@ -143,9 +143,9 @@ public:
 private:
     std::size_t next_input_ = 0;
 
-    std::uint8_t log(const Cycle& c, std::uint16_t a, std::uint8_t v) noexcept {
+    std::uint8_t log(const Cycle& c, std::uint8_t v) noexcept {
         if (record_cycles) {
-            cycles.push(BusAccess{c, a, v});
+            cycles.push(BusAccess{c, v});
         }
         return v;
     }
