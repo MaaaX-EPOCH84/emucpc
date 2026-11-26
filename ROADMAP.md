@@ -8,12 +8,12 @@ l'arrivée sur l'étape. Le plan de l'archive (EmuCPC sur CPCEC) est dans
 
 Statut : ⬜ à faire · 🔶 en cours · ✅ fait · ❌ annulé
 
-Curseur : P4
+Curseur : P5
 
 | # | id | Étape | Contenu | État |
 |---|---|---|---|---|
 | 1 | E1 | Squelette et Z80 | Dépôt public, CMake, CI, Z80 exact contre SingleStepTests | ✅ |
-| 2 | E2 | Z80 au tick | Cycles machine au 1/16 µs, z80test, SSM, variantes NEC et ST | ⬜ |
+| 2 | E2 | Z80 au tick | Cycles machine au 1/16 µs, z80test, SSM, variantes NEC et ST | 🔶 |
 | 3 | E3 | Phases et vitesse | Gate array 40010 de référence, modèle rapide, banc ≥ 800 M ticks/s | ⬜ |
 | 4 | E4 | Banc de la vraie machine | M4, identification, cartouche système, capture RVB, Hantek (dès la M4) | ⬜ |
 | 5 | E5 | Machine 6128 et lot | Mémoire, ROM, PPI, clavier, CRTC, rendu, langage, BASIC | ⬜ |
@@ -52,6 +52,17 @@ Curseur : P4
     - Atteste : https://github.com/MaaaX-EPOCH84/emucpc créé le 2026-11-25 avec l'accord de MaaaX, réglages relus par `gh repo view` ; `main` = `origin/main` = `bbc7de8` (6 commits) ; aucun fichier de ROM, cartouche, disquette, note privée, `AGENTS.md`, `CLAUDE.md` ni `docs/` dans les arbres poussés ; workflow n° 45727026961 vert sur Linux (12 tests), Windows, macOS Intel et ARM (5 tests chacun), l'échantillon de 16 040 cas avec l'activité du bus vert sur les quatre (lu dans les journaux) ; premier passage n° 45688496177 en échec, causes lues et corrigées.
 
 ## Étape 2 — Z80 au tick  [E2]
+
+2.1 ✅ [P5] WAIT, Tw et échantillonnage de INT — `ready` interrogé aux fronts d'échantillonnage de WAIT du data sheet (T2 des cycles mémoire et M1, attente automatique des E/S, acquittement d'interruption), Tw de 4 ticks insérés ; INT et NMI échantillonnés au front du dernier T de l'instruction ; tests doctest avec un bus qui retient READY
+    - Fait le 2026-11-26. Décidé : `ready` interrogé par `Executor::begin()` aux fronts du data sheet Zilog (T2 descendant pour M1 et mémoire, T1 + 6 ticks ; attente automatique pour les E/S, T1 + 10 ; seconde attente automatique pour l'acquittement, T1 + 14), un Tw de 4 ticks par échantillon à READY bas, rééchantillonné ; seule la fin du `Cycle` bouge ; plafond de 65 535 Tw ; INT (niveau) et NMI (front mémorisé) échantillonnés au front montant du dernier T (`now − 4`), servis au `step()` suivant (`Cpu::int_sampled`, `Cpu::nmi_latched`) ; `FlatBus` : fenêtres `wait_from`/`wait_until` et `int_from`/`int_until`, journaux `ready_samples`, `int_samples`.
+    - Écarté : INT et NMI lus au début de `step()` (forme du P3, fausse dès qu'INT change pendant l'instruction) ; un seul `ready_from` dans le bus de test (il bloquait aussi les cycles précédents) ; attente sans plafond.
+    - Atteste : 18 tests doctest, 146 assertions (INT pris au tick 12 d'un NOP et manqué à partir du tick 13, échantillon au tick 20 d'`INC BC`, Tw sur M1, lecture, écriture, sortie, acquittement à T1 + 14, fronts actifs inchangés par les Tw) ; défauts plantés (INT à `now`, E/S échantillonnées sur T2) attrapés ; SingleStepTests entier vert, activité du bus comprise ; CI locale verte (67 s). Coût mesuré : ×128 le temps réel au lieu de ×171 (2 030 M ticks/s), Z80 ≈ 39 % du budget de 800 M ticks/s.
+2.2 ⬜ [P6] Activité du bus T par T, exacte contre SingleStepTests — chaque échantillon des 1 604 000 cas (adresse de rafraîchissement I·R au T3 de M1, cycles internes, durée) ; reconstitution des broches depuis les `Cycle`, réutilisable par le gate array de référence
+2.3 ⬜ [P7] Variantes NEC et ST — `Z80Variant` (Zilog par défaut) pour X et Y de SCF/CCF selon Q, et ce qui distingue les CMOS si une source lue le confirme ; d'après z80test et ses images de référence
+2.4 ⬜ [P8] Banc z80test — harnais sur bus plat imitant `CHAN-OPEN`, `RST 10h` et `IN (FEh)` = BFh du Spectrum ; sources de Patrik Rak (MIT) assemblées par rasm, adaptées si besoin ; sept programmes, échecs lus dans B, CRC verts en Zilog, tests NEC/ST désignant la variante ; étiquettes `full` et `local`
+2.5 ⬜ [P9] Détection SSM — R1 : deux `ED xx` neutres consécutifs émettent un code par un rappel du bus ; coût nul et durée émulée inchangée quand c'est coupé ; codes d'après la spécification SSM v1.2
+2.6 ⬜ [P10] Nettoyage et publication de `docs/` — décidé au P4 (réponse A) : renvois aux notes privées réécrits en sources publiques ou retirés, chemins du poste enlevés, puis `architecture_proposition.md` et `sources_emulateurs.md` publiés
+2.7 ⬜ [P11] Outillage de CI — construction clang dans `ci/run.sh` (elle a trouvé `__cxa_begin_catch` dans le cœur au P4) ; clé de cache de SingleStepTests par système (`runner.os`) dans le workflow
 
 ## Étape 3 — Phases et vitesse  [E3]
 

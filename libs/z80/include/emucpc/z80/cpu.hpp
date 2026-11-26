@@ -21,8 +21,11 @@
 // its dated edges (Cycle). Internal T states only advance the time.
 //
 // Timing: one T state is 4 ticks (Tick = 1/16 us, T = 1/4 us). The edges are
-// the nominal ones of the Zilog data sheet, without wait state; WAIT
-// (Bus::ready) is not sampled yet.
+// those of the Zilog data sheet. WAIT is sampled through Bus::ready on the
+// falling edge of T2 (M1 and memory cycles), of the automatic wait state
+// (I/O) or of the second one (interrupt acknowledge), and on each Tw it
+// adds; INT and NMI on the rising edge of the last T state of an
+// instruction, which the next step() serves.
 #pragma once
 
 #include <compare>
@@ -101,6 +104,8 @@ public:
     bool ei_just = false;  // the last instruction was EI: no interrupt before the next one
     bool p = false;        // the last instruction was LD A,I or LD A,R
     std::uint8_t q = 0;    // F if the last instruction changed the flags, else 0
+    bool int_sampled = false;  // INT was active at the end of the last instruction
+    bool nmi_latched = false;  // an NMI edge seen and not served yet
     Tick now;              // start of the next machine cycle
 
     [[nodiscard]] constexpr std::uint16_t af() const noexcept { return pair(a, f); }
@@ -128,6 +133,8 @@ public:
         ei_just = false;
         p = false;
         q = 0;
+        int_sampled = false;
+        nmi_latched = false;
     }
 
     // Executes one instruction, or one interrupt response, or one M1 cycle

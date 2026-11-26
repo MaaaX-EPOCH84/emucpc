@@ -101,9 +101,11 @@ public:
         const bool after_ld_air = c_.p;
         c_.ei_just = false;
         c_.p = false;
-        if (bus_.nmi_edge(c_.now)) {
+        // NMI and INT as sampled at the end of the previous instruction.
+        if (c_.nmi_latched) {
+            c_.nmi_latched = false;
             nmi(after_ld_air);
-        } else if (c_.iff1 && !after_ei && bus_.int_line(c_.now)) {
+        } else if (c_.int_sampled && c_.iff1 && !after_ei) {
             irq(after_ld_air);
         } else if (c_.halted) {
             // HALT: M1 cycles at PC (the byte after HALT), opcode ignored.
@@ -112,6 +114,7 @@ public:
         } else {
             exec_main<Index::hl>(fetch());
         }
+        sample_interrupts();
         c_.q = flags_written_ ? c_.f : std::uint8_t{0};
         c_.p = ld_air_;
     }
@@ -126,12 +129,50 @@ private:
 
     void internal(unsigned t_states) noexcept { c_.now = c_.now + t_states * ticks_per_t; }
 
-    Cycle cycle(CycleKind kind, unsigned t_states) const noexcept {
+    // INT (a level) and NMI (an edge, latched until served) are sampled on
+    // the rising edge of the last T state of the instruction.
+    void sample_interrupts() noexcept {
+        const Tick last_t{c_.now.value - ticks_per_t};
+        if (bus_.nmi_edge(last_t)) {
+            c_.nmi_latched = true;
+        }
+        c_.int_sampled = bus_.int_line(last_t);
+    }
+
+    // A machine cycle that starts now: its nominal length in T states, the
+    // falling edge where WAIT is first sampled (ticks after T1), and one
+    // Tw of 4 ticks inserted for each sample where READY is false. A bus
+    // that holds READY forever would hang the CPU, as on the real chip; past
+    // 65535 Tw the cycle goes on (a fault of the bus, not a CPU state).
+    Cycle begin(CycleKind kind) noexcept {
+        constexpr std::uint64_t half = ticks_per_t / 2;
+        unsigned t_states = 3;
+        std::uint64_t sample = ticks_per_t + half;  // falling edge of T2
+        switch (kind) {
+        case CycleKind::opcode:
+            t_states = 4;
+            break;
+        case CycleKind::read:
+        case CycleKind::write:
+            break;
+        case CycleKind::io_read:
+        case CycleKind::io_write:
+            t_states = 4;
+            sample = 2 * ticks_per_t + half;  // falling edge of the automatic wait state
+            break;
+        case CycleKind::int_ack:
+            t_states = 6;
+            sample = 3 * ticks_per_t + half;  // falling edge of the second automatic wait state
+            break;
+        }
+        unsigned waits = 0;
+        while (waits < 0xFFFF && !bus_.ready(c_.now + sample + std::uint64_t{waits} * ticks_per_t)) {
+            ++waits;
+        }
         Cycle cy;
         cy.kind = kind;
         cy.t1 = c_.now;
-        cy.end = c_.now + t_states * ticks_per_t;
-        constexpr std::uint64_t half = ticks_per_t / 2;
+        cy.end = c_.now + (t_states + waits) * std::uint64_t{ticks_per_t};
         switch (kind) {
         case CycleKind::opcode:
         case CycleKind::read:
@@ -157,7 +198,7 @@ private:
     void bump_r() noexcept { c_.r = u8((c_.r & 0x80U) | ((c_.r + 1U) & 0x7FU)); }
 
     std::uint8_t fetch() noexcept {
-        const Cycle cy = cycle(CycleKind::opcode, 4);
+        const Cycle cy = begin(CycleKind::opcode);
         const std::uint8_t op = bus_.fetch(cy, c_.pc);
         c_.pc = u16(c_.pc + 1U);
         bump_r();
@@ -166,27 +207,27 @@ private:
     }
 
     std::uint8_t read(std::uint16_t address) noexcept {
-        const Cycle cy = cycle(CycleKind::read, 3);
+        const Cycle cy = begin(CycleKind::read);
         const std::uint8_t v = bus_.read(cy, address);
         c_.now = cy.end;
         return v;
     }
 
     void write(std::uint16_t address, std::uint8_t v) noexcept {
-        const Cycle cy = cycle(CycleKind::write, 3);
+        const Cycle cy = begin(CycleKind::write);
         bus_.write(cy, address, v);
         c_.now = cy.end;
     }
 
     std::uint8_t in(std::uint16_t port) noexcept {
-        const Cycle cy = cycle(CycleKind::io_read, 4);
+        const Cycle cy = begin(CycleKind::io_read);
         const std::uint8_t v = bus_.io_read(cy, port);
         c_.now = cy.end;
         return v;
     }
 
     void out(std::uint16_t port, std::uint8_t v) noexcept {
-        const Cycle cy = cycle(CycleKind::io_write, 4);
+        const Cycle cy = begin(CycleKind::io_write);
         bus_.io_write(cy, port, v);
         c_.now = cy.end;
     }
@@ -250,7 +291,7 @@ private:
             c_.f = u8(c_.f & ~unsigned{PF});
         }
         c_.iff1 = c_.iff2 = false;
-        const Cycle cy = cycle(CycleKind::int_ack, 6);  // M1 with two automatic wait states
+        const Cycle cy = begin(CycleKind::int_ack);  // M1 with two automatic wait states
         const std::uint8_t v = bus_.int_ack(cy);
         bump_r();
         c_.now = cy.end;

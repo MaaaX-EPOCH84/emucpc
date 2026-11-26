@@ -86,11 +86,25 @@ public:
     bool record_cycles = false;
     FixedLog<BusAccess, 256> cycles;  // every machine cycle, when record_cycles
 
+    Tick wait_from = never;   // READY low from this tick...
+    Tick wait_until = never;  // ...up to this one (excluded): wait states
+
     bool int_active = false;         // level of INT
+    Tick int_from = never;           // INT also active from this tick...
+    Tick int_until = never;          // ...up to this one (excluded)
     std::uint8_t int_vector = 0xFF;  // data bus during the acknowledge
     bool nmi_pending = false;        // consumed by the CPU
 
-    bool ready(Tick /*t*/) const noexcept { return true; }
+    // Ticks where the CPU sampled WAIT and INT, when record_cycles.
+    FixedLog<Tick, 256> ready_samples;
+    FixedLog<Tick, 256> int_samples;
+
+    bool ready(Tick t) noexcept {
+        if (record_cycles) {
+            ready_samples.push(t);
+        }
+        return !(t >= wait_from && t < wait_until);
+    }
 
     std::uint8_t fetch(const Cycle& c, std::uint16_t a) noexcept { return log(c, a, memory[a]); }
     std::uint8_t read(const Cycle& c, std::uint16_t a) noexcept { return log(c, a, memory[a]); }
@@ -114,7 +128,12 @@ public:
     }
 
     std::uint8_t int_ack(const Cycle& c) noexcept { return log(c, 0, int_vector); }
-    bool int_line(Tick /*t*/) const noexcept { return int_active; }
+    bool int_line(Tick t) noexcept {
+        if (record_cycles) {
+            int_samples.push(t);
+        }
+        return int_active || (t >= int_from && t < int_until);
+    }
     bool nmi_edge(Tick /*t*/) noexcept {
         const bool edge = nmi_pending;
         nmi_pending = false;
