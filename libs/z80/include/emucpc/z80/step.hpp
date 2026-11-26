@@ -33,6 +33,7 @@
 // (bit 5) everywhere, WZ (MEMPTR), Q for SCF and CCF, P/V cleared when an
 // interrupt is taken right after LD A,I or LD A,R, OUT (C),0, the copy of
 // the result into a register by DDCB/FDCB, SLL, mirrors of the ED opcodes.
+// Cpu::variant changes only X and Y after SCF and CCF (see Variant).
 #pragma once
 
 #include <array>
@@ -604,6 +605,21 @@ private:
         set_f((c_.f & (SF | ZF | PF)) | (c_.a & (XF | YF)) | carry);
     }
 
+    // Flags X and Y after SCF and CCF, by variant (see Variant).
+    [[nodiscard]] unsigned scf_ccf_xy() const noexcept {
+        const unsigned a = c_.a;
+        const unsigned zilog = (unsigned{c_.q} ^ unsigned{c_.f}) | a;
+        switch (c_.variant) {
+        case Variant::nec:
+            return a & (XF | YF);
+        case Variant::st:
+            return (a & XF) | (zilog & YF);
+        case Variant::zilog:
+            break;
+        }
+        return zilog & (XF | YF);
+    }
+
     void daa() noexcept {
         const std::uint8_t a = c_.a;
         unsigned diff = 0;
@@ -820,11 +836,10 @@ private:
             set_f((c_.f & (SF | ZF | PF | CF)) | HF | NF | (c_.a & (XF | YF)));
             break;
         case 0x37:
-            set_f((c_.f & (SF | ZF | PF)) | CF | (((c_.q ^ c_.f) | c_.a) & (XF | YF)));
+            set_f((c_.f & (SF | ZF | PF)) | CF | scf_ccf_xy());
             break;
         case 0x3F:
-            set_f((c_.f & (SF | ZF | PF)) | ((c_.f & CF) != 0 ? HF : CF) |
-                  (((c_.q ^ c_.f) | c_.a) & (XF | YF)));
+            set_f((c_.f & (SF | ZF | PF)) | ((c_.f & CF) != 0 ? HF : CF) | scf_ccf_xy());
             break;
 
         case 0xC0:

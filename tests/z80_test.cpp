@@ -35,6 +35,7 @@ using emucpc::z80::FlatBus;
 using emucpc::z80::Pins;
 using emucpc::z80::Tick;
 using emucpc::z80::ticks_per_t;
+using emucpc::z80::Variant;
 
 constexpr std::uint8_t PF = 0x04;
 
@@ -80,6 +81,63 @@ struct Machine {
 };
 
 }  // namespace
+
+TEST_CASE("SCF and CCF: flags X and Y by variant, after a flag change, a NOP or a prefix") {
+    // A = 00h; CP 28h leaves A and sets X and Y from the operand, so F has
+    // X and Y set and Q = F. Expected X|Y after SCF or CCF: zilog, nec, st.
+    struct Case {
+        const char* name;
+        std::initializer_list<std::uint8_t> code;  // ends with SCF or CCF
+        std::uint8_t zilog, nec, st;
+    };
+    const Case cases[] = {
+        {"CP 28h; SCF", {0xFE, 0x28, 0x37}, 0x00, 0x00, 0x00},
+        {"CP 28h; CCF", {0xFE, 0x28, 0x3F}, 0x00, 0x00, 0x00},
+        {"CP 28h; NOP; SCF", {0xFE, 0x28, 0x00, 0x37}, 0x28, 0x00, 0x20},
+        {"CP 28h; NOP; CCF", {0xFE, 0x28, 0x00, 0x3F}, 0x28, 0x00, 0x20},
+        {"CP 28h; DD SCF", {0xFE, 0x28, 0xDD, 0x37}, 0x28, 0x00, 0x20},
+        {"CP 28h; FD CCF", {0xFE, 0x28, 0xFD, 0x3F}, 0x28, 0x00, 0x20},
+    };
+    constexpr std::uint8_t xy = 0x28;
+    for (const Case& k : cases) {
+        for (const Variant v : {Variant::zilog, Variant::nec, Variant::st}) {
+            Machine m;
+            m.cpu.variant = v;
+            m.cpu.a = 0x00;
+            m.cpu.f = 0x00;
+            m.load(0, k.code);
+            const auto end = static_cast<std::uint16_t>(k.code.size());
+            while (m.cpu.pc != end) {
+                m.step();
+            }
+            const std::uint8_t expected = v == Variant::zilog ? k.zilog : v == Variant::nec ? k.nec : k.st;
+            CAPTURE(k.name);
+            CAPTURE(static_cast<int>(v));
+            CHECK((m.cpu.f & xy) == expected);
+        }
+    }
+
+    // With X and Y in A, all three agree: X and Y = A.
+    for (const Variant v : {Variant::zilog, Variant::nec, Variant::st}) {
+        Machine m;
+        m.cpu.variant = v;
+        m.cpu.a = 0x28;
+        m.cpu.f = 0x00;
+        m.load(0, {0x00, 0x37});
+        m.step();
+        m.step();
+        CHECK((m.cpu.f & xy) == 0x28);
+        CHECK((m.cpu.f & 0x01) == 0x01);  // carry set
+    }
+}
+
+TEST_CASE("the variant survives reset") {
+    Cpu cpu;
+    CHECK(cpu.variant == Variant::zilog);
+    cpu.variant = Variant::st;
+    cpu.reset();
+    CHECK(cpu.variant == Variant::st);
+}
 
 TEST_CASE("power-on and reset values") {
     Cpu cpu;

@@ -78,6 +78,19 @@ struct Cycle {
     friend constexpr bool operator==(const Cycle&, const Cycle&) = default;
 };
 
+// Which Z80 the CPU behaves as. The variants differ only in flags X (bit 3)
+// and Y (bit 5) after SCF and CCF (David Banks, "Undocumented Flags",
+// hoglet67/Z80Decoder wiki, SCF/CCF section; z80test 1.2 tests them):
+//   zilog  NMOS Zilog and its second sources: X, Y = ((Q xor F) or A)
+//   nec    NEC NMOS: X, Y = A
+//   st     ST CMOS: X = A, Y = ((Q xor F) or A)
+// where Q is F when the previous instruction changed the flags, else 0.
+enum class Variant : std::uint8_t {
+    zilog,
+    nec,
+    st,
+};
+
 // What the CPU needs from the machine. Every call is resolved at compile
 // time (no virtual function): step() is instantiated for each bus type.
 template <class B>
@@ -113,6 +126,7 @@ public:
     bool int_sampled = false;  // INT was active at the end of the last instruction
     bool nmi_latched = false;  // an NMI edge seen and not served yet
     Tick now;              // start of the next machine cycle
+    Variant variant = Variant::zilog;  // the chip: kept by reset()
 
     [[nodiscard]] constexpr std::uint16_t af() const noexcept { return pair(a, f); }
     [[nodiscard]] constexpr std::uint16_t bc() const noexcept { return pair(b, c); }
@@ -128,7 +142,7 @@ public:
     constexpr void set_iy(std::uint16_t v) noexcept { split(v, iyh, iyl); }
 
     // RESET: PC, I, R, IM and the interrupt flip-flops cleared, HALT left;
-    // the other registers keep their value.
+    // the other registers, and the variant, keep their value.
     constexpr void reset() noexcept {
         pc = 0;
         i = 0;
