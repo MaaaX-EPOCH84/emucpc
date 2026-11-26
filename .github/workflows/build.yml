@@ -17,7 +17,8 @@
 # UCRT64) and macOS (Intel and ARM). No ROM is involved.
 #
 # The Z80 is checked against SingleStepTests at a fixed commit, fetched once
-# and kept in the Actions cache; its sample also runs as a step of its own,
+# into build/ssts (ignored by Git, so that no check takes it for ours) and
+# kept in the Actions cache; its sample also runs as a step of its own,
 # so that missing data fail the job instead of skipping the test. The local
 # CI (ci/run.sh) keeps clang-tidy, the sanitizers, the core checks against
 # the symbols and the Linux/Windows byte comparison.
@@ -36,22 +37,22 @@ jobs:
   linux:
     runs-on: ubuntu-24.04
     steps:
-      - uses: actions/checkout@v5
+      - uses: actions/checkout@v7
       - name: SingleStepTests from the cache
-        uses: actions/cache@v4
+        uses: actions/cache@v6
         with:
-          path: ssts
-          key: ssts-${{ env.SSTS_COMMIT }}
+          path: build/ssts
+          key: ssts-build-${{ env.SSTS_COMMIT }}
       - name: SingleStepTests
-        run: ci/fetch_ssts.sh ssts "$SSTS_COMMIT"
+        run: ci/fetch_ssts.sh build/ssts "$SSTS_COMMIT"
       - name: Configure
-        run: cmake --preset linux-release -DEMUCPC_SSTS_DIR="$GITHUB_WORKSPACE/ssts/v1"
+        run: cmake --preset linux-release -DEMUCPC_SSTS_DIR="$GITHUB_WORKSPACE/build/ssts/v1"
       - name: Build
         run: cmake --build --preset linux-release --parallel
       - name: Tests
         run: ctest --preset linux-release -L fast
       - name: Z80 against SingleStepTests
-        run: build/linux-release/devtools/emucpc-ssts/emucpc-ssts --dir ssts/v1 --cases 10 --cycles
+        run: build/linux-release/devtools/emucpc-ssts/emucpc-ssts --dir build/ssts/v1 --cases 10 --cycles
 
   windows:
     runs-on: windows-2025
@@ -59,7 +60,7 @@ jobs:
       run:
         shell: msys2 {0}
     steps:
-      - uses: actions/checkout@v5
+      - uses: actions/checkout@v7
       - uses: msys2/setup-msys2@v2
         with:
           msystem: UCRT64
@@ -69,22 +70,22 @@ jobs:
             mingw-w64-ucrt-x86_64-ninja
             git
       - name: SingleStepTests from the cache
-        uses: actions/cache@v4
+        uses: actions/cache@v6
         with:
-          path: ssts
-          key: ssts-${{ env.SSTS_COMMIT }}
+          path: build/ssts
+          key: ssts-build-${{ env.SSTS_COMMIT }}
       - name: SingleStepTests
-        run: ci/fetch_ssts.sh ssts "$SSTS_COMMIT"
+        run: ci/fetch_ssts.sh build/ssts "$SSTS_COMMIT"
       - name: Configure
         run: |
           workspace=$(cygpath -m "$GITHUB_WORKSPACE")
-          cmake -B build -G Ninja -DCMAKE_BUILD_TYPE=Release -DEMUCPC_SSTS_DIR="$workspace/ssts/v1"
+          cmake -B build -G Ninja -DCMAKE_BUILD_TYPE=Release -DEMUCPC_SSTS_DIR="$workspace/build/ssts/v1"
       - name: Build
         run: cmake --build build
       - name: Tests
         run: ctest --test-dir build -L fast --output-on-failure
       - name: Z80 against SingleStepTests
-        run: build/devtools/emucpc-ssts/emucpc-ssts.exe --dir ssts/v1 --cases 10 --cycles
+        run: build/devtools/emucpc-ssts/emucpc-ssts.exe --dir build/ssts/v1 --cases 10 --cycles
 
   macos:
     strategy:
@@ -94,16 +95,16 @@ jobs:
         runner: [macos-15-intel, macos-15]
     runs-on: ${{ matrix.runner }}
     steps:
-      - uses: actions/checkout@v5
+      - uses: actions/checkout@v7
       - name: SingleStepTests from the cache
-        uses: actions/cache@v4
+        uses: actions/cache@v6
         with:
-          path: ssts
-          key: ssts-${{ env.SSTS_COMMIT }}
+          path: build/ssts
+          key: ssts-build-${{ env.SSTS_COMMIT }}
       - name: SingleStepTests
-        run: ci/fetch_ssts.sh ssts "$SSTS_COMMIT"
+        run: ci/fetch_ssts.sh build/ssts "$SSTS_COMMIT"
       - name: Configure
-        run: cmake --preset macos -DEMUCPC_SSTS_DIR="$GITHUB_WORKSPACE/ssts/v1"
+        run: cmake --preset macos -DEMUCPC_SSTS_DIR="$GITHUB_WORKSPACE/build/ssts/v1"
       - name: Build
         run: cmake --build --preset macos --parallel
       - name: Tests
@@ -111,4 +112,4 @@ jobs:
       - name: Z80 against SingleStepTests
         run: |
           file build/macos/devtools/emucpc-ssts/emucpc-ssts
-          build/macos/devtools/emucpc-ssts/emucpc-ssts --dir ssts/v1 --cases 10 --cycles
+          build/macos/devtools/emucpc-ssts/emucpc-ssts --dir build/ssts/v1 --cases 10 --cycles

@@ -527,12 +527,16 @@ int main(int argc, char** argv) {
         }
     };
     {
-        std::vector<std::jthread> pool;
+        // std::thread joined by hand: the libc++ of Apple has no std::jthread.
+        std::vector<std::thread> pool;
         const unsigned jobs = std::min<unsigned>(options.jobs, static_cast<unsigned>(files.size()));
         for (unsigned k = 1; k < jobs; ++k) {
             pool.emplace_back(worker);
         }
         worker();
+        for (std::thread& t : pool) {
+            t.join();
+        }
     }
     const double seconds =
         std::chrono::duration<double>(std::chrono::steady_clock::now() - start).count();
