@@ -44,15 +44,20 @@ third-party copies. `ci/install-hook.sh` makes it a Git pre-commit hook.
 ci/run.sh
 ```
 
-Tests are labelled `fast` (every commit), `full` (on demand) and `local`
-(they need data that is not in this repository). The Z80 is checked
-against [SingleStepTests](https://github.com/SingleStepTests/z80), whose
-`v1/` folder is looked for in `EMUCPC_SSTS_DIR` (CMake cache variable,
+Tests are labelled `fast` (every commit), `full` (on demand), `local`
+(they need data that is not in this repository) and `slow` (left out
+under the sanitizers). The Z80 is checked against
+[SingleStepTests](https://github.com/SingleStepTests/z80), whose `v1/`
+folder is looked for in `EMUCPC_SSTS_DIR` (CMake cache variable,
 initialised from the environment); without it those tests are skipped.
+It is also checked against [z80test](https://github.com/raxoft/z80test)
+1.2a of Patrik Rak, whose programs are in `third_party/z80test/`, run by
+`emucpc-z80test` on a stand-in for a 48K Spectrum, for the Zilog, NEC and
+ST variants.
 
 ```sh
-ctest --preset linux-release -L fast    # the 10 first cases of each file
-ctest --preset linux-release -L full    # all 1 604 000 cases, bus activity included
+ctest --preset linux-release -L fast    # 10 first SingleStepTests cases of each file, z80full, z80ccfscr
+ctest --preset linux-release -L full    # all 1 604 000 cases, bus activity included; every z80test program
 ```
 
 No ROM is included in this repository.

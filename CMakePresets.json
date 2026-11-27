@@ -100,7 +100,7 @@
       "name": "ci-san",
       "inherits": "base",
       "configurePreset": "ci-san",
-      "filter": { "include": { "label": "fast" } }
+      "filter": { "include": { "label": "fast" }, "exclude": { "label": "slow" } }
     },
     {
       "name": "ci-windows",
